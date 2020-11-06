@@ -5,6 +5,7 @@
 param(
 	[Parameter(Mandatory = $true)]
 	[string]$Type,
+	[string]$Arch,
 	[switch]$Sdv
 )
 
@@ -78,8 +79,13 @@ Set-Item -Path Env:MAJOR_VERSION -Value '9'
 Set-Item -Path Env:MINOR_VERSION -Value '0'
 Set-Item -Path Env:MICRO_VERSION -Value '0'
 
-Build "x86" $Type
-Build "x64" $Type
+if ([string]::IsNullOrEmpty($Arch) -or $Arch -eq "x86" -or $Arch -eq "Win32") {
+	Build "x86" $Type
+}
+
+if ([string]::IsNullOrEmpty($Arch) -or $Arch -eq "x64") {
+	Build "x64" $Type
+}
 
 if ($Sdv) {
 	SdvBuild
