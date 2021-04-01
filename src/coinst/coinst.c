@@ -479,6 +479,9 @@ Entry(
     )
 {
     HRESULT                         Error;
+    SP_DRVINFO_DATA                 DriverInfoData;
+    BOOLEAN                         DriverInfoAvailable;
+    BOOLEAN                         IsNullDriver;
 
     Log("%s (%s) ===>",
         MAJOR_VERSION_STR "." MINOR_VERSION_STR "." MICRO_VERSION_STR "." BUILD_NUMBER_STR,
@@ -493,31 +496,39 @@ Entry(
             Context->InstallResult);
     }
 
+    DriverInfoData.cbSize = sizeof(DriverInfoData);
+    DriverInfoAvailable = SetupDiGetSelectedDriver(DeviceInfoSet,
+                                                   DeviceInfoData,
+                                                   &DriverInfoData) ?
+                          TRUE :
+                          FALSE;
+    IsNullDriver = !(DriverInfoAvailable &&
+                    (DriverInfoData.DriverType == SPDIT_CLASSDRIVER ||
+                     DriverInfoData.DriverType == SPDIT_COMPATDRIVER));
+
     switch (Function) {
+	case DIF_SELECTBESTCOMPATDRV: {
+        //
+        // If the NULL driver will be installed, treat this as we would a
+        // DIF_REMOVE to work around the fact that Windows 10 2004 doesn't
+        // call DIF_INSTALLDEVICE on uninstall.
+        // An InstallResult value of ERROR_NO_COMPAT_DRIVERS simply means
+        // that the NULL driver was selected, and so should not be treated
+        // as an error.
+        //
+        if (Context->PostProcessing &&
+            Context->InstallResult == ERROR_NO_COMPAT_DRIVERS)
+            Context->InstallResult = NO_ERROR;
+
+        Error = (IsNullDriver) ?
+                DifRemove(DeviceInfoSet, DeviceInfoData, Context) :
+                NO_ERROR;
+        break;
+    }
     case DIF_INSTALLDEVICE: {
-        SP_DRVINFO_DATA         DriverInfoData;
-        BOOLEAN                 DriverInfoAvailable;
-
-        DriverInfoData.cbSize = sizeof (DriverInfoData);
-        DriverInfoAvailable = SetupDiGetSelectedDriver(DeviceInfoSet,
-                                                       DeviceInfoData,
-                                                       &DriverInfoData) ?
-                              TRUE :
-                              FALSE;
-
-        // The NET class installer will call DIF_REMOVE even in the event of
-        // a NULL driver add. However, the default installer (for the NULL
-        // driver) then fails for some reason so we squash the error in
-        // post-processing.
-        if (DriverInfoAvailable) {
-            Error = DifInstall(DeviceInfoSet, DeviceInfoData, Context);
-        } else {
-            if (!Context->PostProcessing) {
-                Error = ERROR_DI_POSTPROCESSING_REQUIRED; 
-            } else {
-                Error = NO_ERROR;
-            }
-        }
+        Error = (IsNullDriver) ?
+                NO_ERROR :
+                DifInstall(DeviceInfoSet, DeviceInfoData, Context);
         break;
     }
     case DIF_REMOVE:
