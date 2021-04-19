@@ -5,3 +5,9 @@
 
 # Output
 /xennet
+/.build_number
+/include/version.h
+x64/
+Win32/
+vs2019/xennet.inf
+vs2019/version/.revision
